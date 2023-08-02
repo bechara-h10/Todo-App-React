@@ -1,13 +1,55 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import styled from "styled-components";
+import { auth, provider } from "../firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import {
+  selectUserName,
+  selectUserEmail,
+  selectUserPhoto,
+  setSignIn,
+} from "../features/user/userSlice";
+import { useNavigate } from "react-router-dom";
 
 function Header() {
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const userPhoto = useSelector(selectUserPhoto);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        dispatch(
+          setSignIn({
+            name: user.displayName,
+            email: user.email,
+            photo: user.photoURL,
+          })
+        );
+        navigate("/");
+      } else {
+        navigate("/login");
+      }
+      setIsLoading(false); // Set loading state to false once authentication is completed
+    });
+
+    // Clean up the subscription to avoid memory leaks
+    return () => unsubscribe();
+  }, []);
+
+  // Render the loading state while waiting for authentication to complete
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  // Render the header once authentication is completed
   return (
     <Container>
       <HeaderTitle>
         <h1>Todo App</h1>
       </HeaderTitle>
-      <UserImg src="./images/logo512.png" />
+      {userPhoto ? <UserImg src={userPhoto} /> : null}
     </Container>
   );
 }

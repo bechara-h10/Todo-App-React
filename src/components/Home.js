@@ -1,30 +1,44 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useId } from "react";
 import Todo from "./Todo";
 import styled from "styled-components";
+import { useSelector } from "react-redux";
+import {
+  selectProjectName,
+  selectProjectTodos,
+} from "../features/project/projectSlice";
+import { addDoc, doc, setDoc, collection } from "firebase/firestore";
+import db from "../firebase";
+import { selectUserId } from "../features/user/userSlice";
 
 function Home() {
-  const [allTodos, setTodos] = useState({
-    userEmail: "bechara.hosri1@gmail.com",
-    todos: [
-      { text: "Go grocery shopping", dueDate: new Date() },
-      { text: "Take out the trash", dueDate: new Date() },
-    ],
-  });
+  const [project, setCurrentProject] = useState({ name: "", todos: [] });
+  const projectName = useSelector(selectProjectName);
+  const projectTodos = useSelector(selectProjectTodos);
+  const userId = useSelector(selectUserId);
+  useEffect(() => {
+    setCurrentProject({
+      name: projectName,
+      todos: projectTodos,
+    });
+  }, [projectName, projectTodos]);
   const [input, setInput] = useState("");
+  const [dateInput, setDateInput] = useState(new Date());
   const addTodo = (e) => {
     e.preventDefault();
     const newTodo = {
       text: input,
-      dueDate: new Date(),
+      dueDate: dateInput,
+      done: false,
     };
-    allTodos.todos.push(newTodo);
-    setTodos(allTodos);
-    console.log(allTodos.todos);
-    setInput("");
+    const userRef = doc(db, "userData", userId);
+    const projectRef = collection(userRef, "projects").doc();
   };
   return (
     <Container>
       <Content>
+        <ProjectTitle>
+          <h1>{project.name}</h1>
+        </ProjectTitle>
         <form onSubmit={addTodo}>
           <input
             type="text"
@@ -32,18 +46,25 @@ function Home() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
+          <input
+            type="date"
+            value={dateInput}
+            onChange={(e) => setDateInput(e.target.value)}
+          />
           <button type="submit">Add Todo</button>
         </form>
         <ul>
-          {allTodos.todos.map((todo, index) => {
-            return (
-              <Todo
-                text={todo.text}
-                dueDate={todo.dueDate.toDateString()}
-                key={index}
-              />
-            );
-          })}
+          {project &&
+            project.todos.map((todo, index) => {
+              return (
+                <Todo
+                  text={todo.text}
+                  dueDate={todo.dueDate.toDateString()}
+                  done={todo.done}
+                  key={index}
+                />
+              );
+            })}
         </ul>
       </Content>
     </Container>
@@ -63,8 +84,9 @@ const Content = styled.div`
   form {
     display: flex;
     justify-content: space-between;
+    gap: 4px;
     input {
-      flex: 1;
+      flex: 3;
       font-size: 18px;
       padding: 4px 0;
       border: solid 1px rgba(0, 0, 0, 0.4);
@@ -74,9 +96,11 @@ const Content = styled.div`
         outline: none;
       }
     }
+    input[type="date"] {
+      flex: 1;
+    }
     button {
       padding: 8px 16px;
-      margin-left: 8px;
       border-radius: 4px;
       border: none;
       background-color: #24a0ed;
@@ -91,6 +115,10 @@ const Content = styled.div`
   ul {
     list-style: none;
   }
+`;
+
+const ProjectTitle = styled.div`
+  margin-bottom: 24px;
 `;
 
 export default Home;
