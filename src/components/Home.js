@@ -3,46 +3,104 @@ import Todo from "./Todo";
 import styled from "styled-components";
 import { useSelector } from "react-redux";
 import {
+  selectProjectId,
   selectProjectName,
-  selectProjectTodos,
 } from "../features/project/projectSlice";
-import { addDoc, doc, setDoc, collection } from "firebase/firestore";
+import {
+  getDoc,
+  addDoc,
+  doc,
+  collection,
+  getDocs,
+  onSnapshot,
+} from "firebase/firestore";
 import db from "../firebase";
 import { selectUserId } from "../features/user/userSlice";
+import toast, { Toaster } from "react-hot-toast";
 
 function Home() {
-  const [project, setCurrentProject] = useState({ name: "", todos: [] });
+  const [todos, setTodos] = useState([]);
   const projectName = useSelector(selectProjectName);
-  const projectTodos = useSelector(selectProjectTodos);
   const userId = useSelector(selectUserId);
+  const projectId = useSelector(selectProjectId);
   useEffect(() => {
-    setCurrentProject({
-      name: projectName,
-      todos: projectTodos,
-    });
-  }, [projectName, projectTodos]);
+    getProjectData(userId, projectId);
+  }, [projectId]);
   const [input, setInput] = useState("");
   const [dateInput, setDateInput] = useState(new Date());
-  const addTodo = (e) => {
+
+  const getProjectData = async (userId, projectId) => {
+    try {
+      const userRef = doc(db, "userData", userId);
+      const projectRef = doc(collection(userRef, "projects"), projectId);
+
+      // Get the initial todos data
+      const todosRef = collection(projectRef, "todos");
+      const todosSnapshot = await getDocs(todosRef);
+      const todosData = todosSnapshot.docs.map((todoDoc) => {
+        return { id: todoDoc.id, ...todoDoc.data() };
+      });
+      todosData.forEach((todo) => (todo.dueDate = new Date(todo.dueDate)));
+
+      // Set the initial todos data to the state
+      setTodos(todosData);
+
+      // Use onSnapshot to listen for real-time updates for todos
+      onSnapshot(todosRef, (snapshot) => {
+        const updatedTodosData = snapshot.docs.map((todoDoc) => {
+          return { id: todoDoc.id, ...todoDoc.data() };
+        });
+        updatedTodosData.forEach(
+          (todo) => (todo.dueDate = new Date(todo.dueDate))
+        );
+        console.log(updatedTodosData);
+        setTodos(updatedTodosData);
+      });
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const addTodoToProject = async (e, userId, projectId) => {
     e.preventDefault();
-    const newTodo = {
+    if (!input) {
+      alert("Inputs cannot be empty!");
+      return;
+    }
+    if (!projectId) {
+      alert("You need to select a project!");
+      return;
+    }
+    const todoData = {
       text: input,
-      dueDate: dateInput,
+      dueDate: new Date(dateInput),
       done: false,
     };
-    const userRef = doc(db, "userData", userId);
-    const projectRef = collection(userRef, "projects").doc();
+    try {
+      const userRef = doc(db, "userData", userId);
+      const projectRef = doc(collection(userRef, "projects"), projectId);
+      const addedTodo = await addDoc(collection(projectRef, "todos"), {
+        text: todoData.text,
+        dueDate: todoData.dueDate.toDateString(),
+        done: todoData.done,
+      });
+      toast("Todo added to project successfully");
+      setInput("");
+      setDateInput(new Date());
+    } catch (error) {
+      console.error("Error adding todo to project", error);
+    }
   };
   return (
     <Container>
       <Content>
         <ProjectTitle>
-          <h1>{project.name}</h1>
+          <h1>{projectName}</h1>
         </ProjectTitle>
-        <form onSubmit={addTodo}>
+        <form onSubmit={(e) => addTodoToProject(e, userId, projectId)}>
           <input
             type="text"
-            placeholder="Take out the dogs"
+            placeholder="Add a todo"
             value={input}
             onChange={(e) => setInput(e.target.value)}
           />
@@ -54,19 +112,32 @@ function Home() {
           <button type="submit">Add Todo</button>
         </form>
         <ul>
-          {project &&
-            project.todos.map((todo, index) => {
+          {todos &&
+            todos.map((todo) => {
               return (
                 <Todo
                   text={todo.text}
                   dueDate={todo.dueDate.toDateString()}
-                  done={todo.done}
-                  key={index}
+                  done={todo.done.toString()}
+                  key={todo.id}
+                  id={todo.id}
                 />
               );
             })}
         </ul>
       </Content>
+      <Toaster
+        position="bottom-center"
+        reverseOrder={false}
+        gutter={8}
+        toastOptions={{
+          duration: 2000,
+          style: {
+            background: "#00ff55",
+            color: "#fff",
+          },
+        }}
+      />
     </Container>
   );
 }
@@ -88,7 +159,7 @@ const Content = styled.div`
     input {
       flex: 3;
       font-size: 18px;
-      padding: 4px 0;
+      padding: 4px;
       border: solid 1px rgba(0, 0, 0, 0.4);
       border-radius: 4px;
       &:focus {

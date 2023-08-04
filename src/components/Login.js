@@ -2,27 +2,45 @@ import React, { useEffect } from "react";
 import styled from "styled-components";
 import { auth, provider } from "../firebase";
 import { signInWithPopup, onAuthStateChanged } from "firebase/auth";
+import {
+  doc,
+  setDoc,
+  getDoc,
+  query,
+  where,
+  collection,
+} from "firebase/firestore";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { selectUserName, setSignIn } from "../features/user/userSlice";
+import db from "../firebase";
 
 function Login() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const signIn = () => {
-    signInWithPopup(auth, provider)
-      .then((result) => {
-        let user = result.user;
-        dispatch(
-          setSignIn({
-            name: user.displayName,
-            email: user.email,
-            photo: user.photoURL,
-          })
-        );
-        navigate("/");
-      })
-      .catch((err) => console.log(err));
+  const signIn = async () => {
+    try {
+      const userCredential = await signInWithPopup(auth, provider);
+      const user = userCredential.user;
+      dispatch(
+        setSignIn({
+          name: user.displayName,
+          email: user.email,
+          photo: user.photoURL,
+        })
+      );
+      const userRef = collection(db, "userData");
+      const queryByEmail = query(userRef, where("userEmail", "==", user.email));
+      const userSnapshot = await getDoc(queryByEmail);
+      if (!userSnapshot.exists()) {
+        await setDoc(userRef, {
+          userEmail: user.email,
+        });
+      }
+      navigate("/");
+    } catch (error) {
+      console.log(error);
+    }
   };
   useEffect(() => {
     onAuthStateChanged(auth, async (user) => {
